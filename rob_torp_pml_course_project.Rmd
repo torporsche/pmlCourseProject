@@ -1,0 +1,118 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Rob Torp"
+date: "Friday, October 23, 2015"
+output: html_document
+---
+
+**Introduction**
+---
+&nbsp;
+
+
+The purpose of this project was to evaluate data collected from accelerometers to determine if a group of individuals performed an exercise correctly or incorrectly. A training data set with 160 variables was provided to fit predictive models. This data set included a "classe" variable which indicates if the exercise was performed correctly or the error the individual made if the exercise was performed incorrectly. A variety of machine learning algorithms from the caret package are available for model creation and it is the task of the student to determine which is best suited for the project. Once a satisfactory model is fitted, the student must apply the model to a test set of 20 observations and in an attempt to correctly predict the "classe" for each.
+
+**Cross Validation**
+---
+&nbsp;
+
+Cross validation was conducted by splitting the "pml-training.csv" data set into a testing set and training set via the createDataPartition function in caret. I put 70% of the observations into a data frame named testing and 30% into a data frame named training. Models were fitted only on the the training data set. Once a satisfactory model was fitted I then predicted the "classe" values from the testing set I had created and evaluated the model's performance with a confusion matrix.
+
+```{r echo = FALSE, message = FALSE}
+# Sets working directory to where project data is stored
+setwd("F:/Storage/Dropbox/Coursera/Practical Machine Learning/Data")
+fitData <- read.csv("pml-training.csv")
+fitTest <- read.csv("pml-testing.csv")
+
+# Loads primary packages required for project
+library(caret)
+library(randomForest)
+
+# Although it may not be necessary classe is coerced into a factor variable
+fitData$classe <- as.factor(fitData$classe)
+
+# Ensure random results results can be reproduced
+set.seed(33833)
+
+# Creates a training and testing set for cross-validation
+fitTrain <- createDataPartition(y=fitData$classe,
+                                p=0.7, list=FALSE)
+
+training <- fitData[fitTrain,]
+testing <- fitData[-fitTrain,]
+
+```
+**Model Selection**
+---
+&nbsp;
+
+My model selection approach was very straightforward as I had determined that I would implement a model using random forest prior to starting the project. I made this selection because it was mentioned in one of the video lectures that random forest is one of the most commonly used machine learning algorithms in kaggle competitions. At some point I would like to start participating in kaggle competitions so I thought this approach would be a good way to gain some experience to help with that goal.
+
+Other reasons why I selected random forest are because it is very tolerant of missing values and outliers. With many other techniques, such as linear regression, it is necessary to impute missing values and outliers can have a negative impact on the model. Random forest produces accurate models despite these challenges.
+
+Assuming that random forest produced satisfactory results, the only unknown would be which variables to include for training. Initially I fit a model using all remaining variables to predict "classe" on the training set I created from the "pml-training.csv" data. The results where not good and upon evaluating the model with varImp, only one variable was indicated as important. 
+
+I had noticed while conducting EDA that many of the columns within "pml-training.csv" where either blank or contained "NA". This prompted me to look at the "pml-testing.csv" data to see if many of the variables had these same issues and they did. Since the purpose of the project was to predict the "classe" for each of the observations in "pml-testing.csv", it would be pointless to train a model with variables that are all blank or "NA" in this data set. The variability in both cases is 0 so there would be no predictive power associated with them. 
+
+As as result of this observation, I fit another model on the training set but did not include any variables that were blank or "NA" in "pml-testing.csv"
+
+Below is the second model I fitted, it is not included in an r chunk because it takes far too long to complete training:
+
+
+modFDTrain <- train(classe ~ raw_timestamp_part_1 + raw_timestamp_part_2 + num_window + roll_belt + pitch_belt + yaw_belt + 
+                      total_accel_belt + gyros_belt_x + gyros_belt_y + gyros_belt_z + accel_belt_x + accel_belt_y + accel_belt_z + 
+                      magnet_belt_x + magnet_belt_y + magnet_belt_z + roll_arm + pitch_arm + yaw_arm + total_accel_arm + gyros_arm_x + 
+                      gyros_arm_y + gyros_arm_z + accel_arm_x + accel_arm_y + accel_arm_z + magnet_arm_x + magnet_arm_y + magnet_arm_z + 
+                      roll_dumbbell + pitch_dumbbell + yaw_dumbbell + total_accel_dumbbell + gyros_dumbbell_x + gyros_dumbbell_y + 
+                      gyros_dumbbell_z + accel_dumbbell_x + accel_dumbbell_y + accel_dumbbell_z + magnet_dumbbell_x + 
+                      magnet_dumbbell_y + magnet_dumbbell_z + roll_forearm + pitch_forearm + yaw_forearm + total_accel_forearm + 
+                      gyros_forearm_x + gyros_forearm_y + gyros_forearm_z + accel_forearm_x + accel_forearm_y + accel_forearm_z + 
+                      magnet_forearm_x + magnet_forearm_y + magnet_forearm_z
+, data =training, method = "rf", proximity=TRUE)
+
+
+After the second training attempt completed, I evaluated the rf variable importance and the results were much better this time around. The results have been scaled to help conceptualize relative importance:
+
+
+```{r echo  = FALSE }
+# Traing the model takes too long to reproduced so it is being loaded from saved data
+load("F:/Storage/Dropbox/Coursera/Practical Machine Learning/Data/pml_course_project.RData")
+```
+
+```{r echo = FALSE}
+# Returns a list of variable importance
+trainImp <- varImp(modFDTrain, scale = TRUE)
+trainImp
+
+
+```
+Since the results of varImp looked to be acceptable, I then evaluated the model on the cross validation test set. Random forest models are known to be very accurate in predictive ability so my expectation was that my out of sample error would be low. The model performed almost perfectly with out of sample data as indicated by the confusionMatrix I used to evaluate the model:
+
+
+```{r echo = FALSE}
+# Creates a table comparing predicted vs actual values from the cross validation test set
+pred <- predict(modFDTrain,newdata=testing); testing$predRight <- pred == testing$classe
+confusionMatrix(pred,testing$classe)
+
+```
+
+The testing data set contained 5885 observations and the model correctly predicted the "classe" for all but 10 which equates to 99.8% accuracy on out of sample data. 
+
+
+**Assigment Performance**
+---
+&nbsp;
+
+Although it might be possible to improve the performance of this model, I felt that 99.8% accuracy was more than acceptable for the purpose of this project. The "pml-testing.csv" data set contains only 20 observations and my model should miss only 1 in 500 predictions so I was confident that the model would correctly predict the "classe" in most cases. A wise man once said "Don't let perfect get in the way of good." As a result, I proceeded with my random forest model titled "ModFDTRain" to create my prediction submissions for the assignment.
+
+**Assignement Prediction Results: 20 Correct Out Of 20**
+---
+
+
+**Conclusion**
+---
+&nbsp;
+
+Random forest is a very powerful modeling technique and I am very impressed with the outcome. It only required two training attempts to fit a model with 99.8% accuracy. However, I do have concerns that the model could be over fit. The final version included roughly 60 features which could allow for some noise to impact predictions. Given more time I would reduce the number of features included in the model either through additional EDA or through other techniques such as Principal Component Analysis. As an example some of the features I left in seem to be sequential values and in theory should not have predictive qualities.
+
+Also, I could have included more figures in the report but I believe the proof is in the prediction. The results of the confusion matrix are the most important and I believe these results indicated that the model was more that sufficient. If I were presenting this information to a non-technical audience I would have included additional figures but I did not find that it would add value for the intended purpose of the assignment.
